@@ -5,13 +5,29 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Book } from './interfaces/book.interface';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
+import { SearchBookDto } from './dto/search-book.dto';
 
 @Injectable()
 export class BooksService {
   private books: Book[] = [];
 
-  getAll(): Book[] {
-    return this.books;
+  getAll(query: SearchBookDto): Book[] {
+    const { text = '', sortBy = 'asc' } = query;
+    let yearFrom = query?.yearFrom ?? 1800;
+    let yearTo = query?.yearTo ?? new Date().getFullYear();
+
+    if (yearFrom > yearTo) [yearTo, yearFrom] = [yearFrom, yearTo];
+
+    const result = this.books
+      .filter(
+        (book) =>
+          (!text || book.title.toLowerCase().includes(text.toLowerCase())) &&
+          (!yearFrom || book.year >= yearFrom) &&
+          (!yearTo || book.year <= yearTo),
+      )
+      .sort((a, b) => (sortBy === 'asc' ? a.year - b.year : b.year - a.year));
+
+    return result;
   }
 
   getOne(id: string): Book {

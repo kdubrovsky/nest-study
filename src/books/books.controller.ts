@@ -6,10 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
+import { SearchBookDto } from './dto/search-book.dto';
 
 import { BooksService } from './books.service';
 
@@ -18,8 +20,8 @@ export class BooksController {
   constructor(private readonly booksService: BooksService) {}
 
   @Get()
-  getAll() {
-    return this.booksService.getAll();
+  getAll(@Query() query: SearchBookDto) {
+    return this.booksService.getAll(query);
   }
 
   @Get(':id')
