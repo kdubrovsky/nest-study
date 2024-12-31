@@ -2,71 +2,83 @@ import { randomUUID } from 'crypto';
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 
-import { Book } from './interfaces/book.interface';
 import { CreateBookDto } from './dto/create-book.dto';
 import { UpdateBookDto } from './dto/update-book.dto';
 import { SearchBookDto } from './dto/search-book.dto';
 
+import { Repository } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Book } from './entities/book.entity';
+
 @Injectable()
 export class BooksService {
-  private books: Book[] = [];
+  constructor(
+    @InjectRepository(Book)
+    private bookRepository: Repository<Book>,
+  ) {}
 
-  getAll(query: SearchBookDto): Book[] {
-    const { text = '', sortBy = 'asc' } = query;
-    let yearFrom = query?.yearFrom ?? 1800;
-    let yearTo = query?.yearTo ?? new Date().getFullYear();
+  async getAll(query: SearchBookDto): Promise<Book[]> {
+    const { text, yearFrom, yearTo, sortBy } = query;
 
-    if (yearFrom > yearTo) [yearTo, yearFrom] = [yearFrom, yearTo];
+    const queryBuilder = this.bookRepository.createQueryBuilder('book');
 
-    const result = this.books
-      .filter(
-        (book) =>
-          (!text || book.title.toLowerCase().includes(text.toLowerCase())) &&
-          (!yearFrom || book.year >= yearFrom) &&
-          (!yearTo || book.year <= yearTo),
-      )
-      .sort((a, b) => (sortBy === 'asc' ? a.year - b.year : b.year - a.year));
+    // Добавляем условия, если они есть
+    if (text) {
+      queryBuilder.where('LOWER(book.title) LIKE LOWER(:text)', {
+        text: `%${text}%`,
+      });
+    }
 
-    return result;
+    if (yearFrom) {
+      queryBuilder.andWhere('book.year >= :yearFrom', { yearFrom });
+    }
+
+    if (yearTo) {
+      queryBuilder.andWhere('book.year <= :yearTo', { yearTo });
+    }
+
+    // Добавляем сортировку
+    if (sortBy) {
+      const order = sortBy.toUpperCase() as 'ASC' | 'DESC';
+      queryBuilder.orderBy('book.year', order);
+    }
+
+    return queryBuilder.getMany();
   }
 
-  getOne(id: string): Book {
-    const book = this.books.find((item) => item.id === id);
+  async getOne(id: number): Promise<Book> {
+    const book = await this.bookRepository.findOne({ where: { id } });
     if (!book) {
       throw new NotFoundException(`Book with ID ${id} not found`);
     }
     return book;
   }
 
-  create(createBookDto: CreateBookDto): Book {
-    const id = randomUUID();
-    const newBook = {
-      id,
-      ...createBookDto,
-    };
-    this.books.push(newBook);
+  async create(createBookDto: CreateBookDto): Promise<Book> {
+    const newBook = this.bookRepository.create(createBookDto);
+    await this.bookRepository.save(newBook);
     return newBook;
   }
 
-  update(id: string, updateBookDto: UpdateBookDto): Book {
-    const i = this.books.findIndex((item) => item.id === id);
-    if (i < 0) {
+  async update(id: number, updateBookDto: UpdateBookDto): Promise<Book> {
+    const book = await this.bookRepository.findOne({ where: { id } });
+    if (!book) {
       throw new NotFoundException(`Book with ID ${id} not found`);
     }
+
     const updatedBook = {
-      ...this.books[i],
+      ...book,
       ...updateBookDto,
     };
-    this.books[i] = updatedBook;
-    return updatedBook;
+    return this.bookRepository.save(updatedBook);
   }
 
-  delete(id: string): Book {
-    const i = this.books.findIndex((item) => item.id === id);
-    if (i < 0) {
+  async delete(id: number): Promise<Book> {
+    const book = await this.bookRepository.findOne({ where: { id } });
+    if (!book) {
       throw new NotFoundException(`Book with ID ${id} not found`);
     }
-    const deletedBook = this.books.splice(i, 1)[0];
-    return deletedBook;
+
+    return this.bookRepository.remove(book);
   }
 }
